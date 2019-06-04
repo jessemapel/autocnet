@@ -5,9 +5,9 @@ cluster:
     # Which processing queue should be used?
     queue: 'shortall'
     # Location to put <jobid.log> files for cluster jobs
-    cluster_log_dir: '/scratch/jmapel/ctx/autocnet/demo_logs'
+    cluster_log_dir: '/scratch/jlaura/elysium/logs'
     cluster_submission: 'slurm'  # or `pbs`
-    tmp_scratch_dir: '/scratch/jmapel/ctx/autocnet/demo_tmp'
+    tmp_scratch_dir: '/scratch/jlaura'
 
     # The amount of RAM (in MB) to request for jobs
     extractor_memory: 8192
@@ -16,13 +16,13 @@ cluster:
 ### Database Configuration ###
 database:
     type: 'postgresql'
-    username: 'jay'
-    password: 'abcde'
+    username: 'sample'
+    password: 'sample'
     host: 'smalls'
     port: 8085
     pgbouncer_port: 8083
     # The name of the database to connect to.  Tables will be created inside this DB.
-    name: 'mapelelysiumdemo' # This needs to be all lowercase for PostGreSQL!
+    name: 'jelysiumtest' # This needs to be all lowercase for PostGreSQL!
     # The number of seconds to wait while attemping to connect to the DB.
     timeout: 500
 
@@ -35,9 +35,9 @@ redis:
     basename: 'elysium'
     host: 'smalls'
     port: '8084'
-    completed_queue: 'mapel_demo:done'
-    processing_queue: 'mapel_demo:proc'
-    working_queue: 'mapel_demo:working'
+    completed_queue: 'jely:done'
+    processing_queue: 'jely:proc'
+    working_queue: 'jely:working'
 
 ### Spatial Reference Setup ###
 spatial:
@@ -48,7 +48,7 @@ spatial:
 
 ### Working Directories ###
 directories:
-    vrt_dir: '/scratch/jmapel/ctx/autocnet/demo_vrt'
+    vrt_dir: '/sratch/jlaura/elysium/vrt'
 
 algorithms:
     ring_match:
@@ -77,3 +77,4 @@ algorithms:
           initial_y_size: 500
           corr_x_size: 40
           corr_y_size: 40
+
