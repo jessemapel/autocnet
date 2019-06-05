@@ -10,6 +10,14 @@ import yaml
 
 from autocnet.io.db import connection
 from autocnet.io.db.redis_queue import pop_computetime_push, finalize
+from autocnet.io.db.model import Images, Measures, MeasureType, Overlay, Points, PointType
+from autocnet.cg import cg as compgeom
+from autocnet.graph.node import NetworkNode
+from autocnet import Session
+
+import shapely
+
+import pyproj
 
 #Load the config file
 try:
@@ -19,8 +27,72 @@ except:
     print("The 'autocnet_config' environment variable is not set.")
     sys.exit()
 
-def main():
+def main(msg, config):
+    session = Session()
+    srid = config['spatial']['srid']
+    semi_major = config['spatial']['semimajor_rad']
+    semi_minor = config['spatial']['semiminor_rad']
+    ecef = pyproj.Proj(proj='geocent', a=semi_major, b=semi_minor)
+    lla = pyproj.Proj(proj='latlon', a=semi_major, b=semi_minor)
+    id = msg['id']
+    intersections = msg['intersections']
+    geom = shapely.wkt.loads(msg['geom'])
+
+    valid = compgeom.distribute_points_in_geom(geom)
+    if not valid:
+        print('No points distributed in overlap', id)
+        sys.exit()
+
+    source = intersections[0]
+    intersections.remove(source)
+    res = session.query(Images).filter(Images.id == source).first()
+    source = NetworkNode(node_id=source, image_path=res.path)
+    source_camera = source.camera
+    for v in valid:
+        geom = f'srid={srid};Point({v[0]} {v[1]})'
+        point = Points(geom=geom,
+                       pointtype=PointType(2)) # Would be 3 or 4 for ground
+
+        # Get the BCEF coordinate from the lon, lat
+        x, y, z = pyproj.transform(lla, ecef, v[0], v[1], height)  # -3000 working well in elysium, need aeroid
+        gnd = csmapi.EcefCoord(x, y, z)
+
+        # Grab the source image. This is just the node with the lowest ID, nothing smart.
+        sic = source_camera.groundToImage(gnd)
+        point.measures.append(Measures(sample=sic.samp,
+                                       line=sic.line,
+                                       imageid=source['node_id'],
+                                       serial=source.isis_serial,
+                                       measuretype=MeasureType(3)))
+
+
+        for i, d in enumerate(overlaps):
+            destination = cg.node[d]['data']
+            destination_camera = destination.camera
+            dic = destination_camera.groundToImage(gnd)
+            dx, dy, metrics = iterative_phase(sic.samp, sic.line, dic.samp, dic.line,
+                                              source.geodata, destination.geodata,
+                                              **iterative_phase_kwargs)
+            if dx is not None or dy is not None:
+                point.measures.append(Measures(sample=dx,
+                                               line=dy,
+                                               imageid=destination['node_id'],
+                                               serial=destination.isis_serial,
+                                               measuretype=MeasureType(3)))
+        if len(point.measures) >= 2:
+            points.append(point)
+    session.add_all(points)
+    session.commit()
+
     print('hello')
+    session.close()
 
 if __name__ == '__main__':
-    main()
+    conf = config['redis']
+    queue = StrictRedis(host=conf['host'], port=conf['port'], db=0)
+
+    msg = pop_computetime_push(queue,
+                               conf['processing_queue'],
+                               conf['working_queue'])
+
+    response = main(msg, config)
