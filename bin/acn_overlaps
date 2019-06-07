@@ -11,12 +11,13 @@ import yaml
 from autocnet.io.db import connection
 from autocnet.io.db.redis_queue import pop_computetime_push, finalize
 from autocnet.io.db.model import Images, Measures, MeasureType, Overlay, Points, PointType
+from autocnet.matcher.subpixel import iterative_phase
 from autocnet.cg import cg as compgeom
 from autocnet.graph.node import NetworkNode
 from autocnet import Session
 
 import shapely
-
+import csmapi
 import pyproj
 
 #Load the config file
@@ -28,6 +29,7 @@ except:
     sys.exit()
 
 def main(msg, config):
+    points = []
     session = Session()
     srid = config['spatial']['srid']
     semi_major = config['spatial']['semimajor_rad']
@@ -54,7 +56,7 @@ def main(msg, config):
                        pointtype=PointType(2)) # Would be 3 or 4 for ground
 
         # Get the BCEF coordinate from the lon, lat
-        x, y, z = pyproj.transform(lla, ecef, v[0], v[1], height)  # -3000 working well in elysium, need aeroid
+        x, y, z = pyproj.transform(lla, ecef, v[0], v[1], msg['height'])  # -3000 working well in elysium, need aeroid
         gnd = csmapi.EcefCoord(x, y, z)
 
         # Grab the source image. This is just the node with the lowest ID, nothing smart.
@@ -66,13 +68,14 @@ def main(msg, config):
                                        measuretype=MeasureType(3)))
 
 
-        for i, d in enumerate(overlaps):
-            destination = cg.node[d]['data']
+        for i, d in enumerate(intersections):
+            res = session.query(Images).filter(Images.id == d).first()
+            destination = NetworkNode(node_id=d, image_path=res.path)
             destination_camera = destination.camera
             dic = destination_camera.groundToImage(gnd)
             dx, dy, metrics = iterative_phase(sic.samp, sic.line, dic.samp, dic.line,
                                               source.geodata, destination.geodata,
-                                              **iterative_phase_kwargs)
+                                              **msg['iterative_phase_kwargs'])
             if dx is not None or dy is not None:
                 point.measures.append(Measures(sample=dx,
                                                line=dy,
