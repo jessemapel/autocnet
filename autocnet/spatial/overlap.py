@@ -56,7 +56,11 @@ def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None, height=0
         valid = compgeom.distribute_points_in_geom(geoalchemy2.shape.to_shape(o.geom))
         if not valid:
             continue
+
         overlaps = o.intersections
+
+        if intersections == None:
+            continue
 
         if reference is None:
             source = overlaps[0]

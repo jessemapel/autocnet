@@ -617,9 +617,12 @@ class NetworkNode(Node):
         if model_name is None:
             return
         isdpath = os.path.splitext(self['image_path'])[0] + '.json'
-        with open(isdpath, 'w') as f:
-            json.dump(response, f)
-            isd = csmapi.Isd(self['image_path'])
+        try:
+            with open(isdpath, 'w') as f:
+                json.dump(response, f)
+        except Exception as e:
+            warnings.warn('Failed to write JSON ISD for image {}.\n{}'.format(self['image_path'], e))
+        isd = csmapi.Isd(self['image_path'])
         plugin = csmapi.Plugin.findPlugin('UsgsAstroPluginCSM')
         self._camera = plugin.constructModelFromISD(isd, model_name)
         serialized_camera = self._camera.getModelState()
