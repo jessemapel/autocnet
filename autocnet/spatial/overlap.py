@@ -1,7 +1,6 @@
 import warnings
 from autocnet import config, Session, engine
 from autocnet.cg import cg as compgeom
-from autocnet.graph.node import NetworkNode
 from autocnet.io.db.model import Images, Measures, Overlay, Points
 from autocnet.matcher.subpixel import iterative_phase
 
@@ -155,15 +154,15 @@ def cluster_place_points_in_overlaps(size_threshold=0.0007, height=0,
     submitter.submit(array='1-{}'.format(job_counter))
     return job_counter
 
-def place_points_in_overlap(intersections, geom, height=0,
+def place_points_in_overlap(nodes, geom, height=0,
                             iterative_phase_kwargs={'size':71}):
     """
     Place points into an overlap geometry by back-projecing using sensor models.
 
     Parameters
     ----------
-    intersections : iterable
-        The IDs of all of the images that intersect the overlap
+    nodes : list of Nodes
+        The CandidateGraph nodes of all the images that intersect the overlap
 
     geom : geometry
         The geometry of the overlap region
@@ -173,9 +172,13 @@ def place_points_in_overlap(intersections, geom, height=0,
 
     iterative_phase_kwargs : dict
         Dictionary of keyword arguments for the iterative phase matcher function
+
+    Returns
+    -------
+    points : list of Points
+        The list of points seeded in the overlap
     """
     points = []
-    session = Session()
     semi_major = config['spatial']['semimajor_rad']
     semi_minor = config['spatial']['semiminor_rad']
     ecef = pyproj.Proj(proj='geocent', a=semi_major, b=semi_minor)
@@ -186,10 +189,8 @@ def place_points_in_overlap(intersections, geom, height=0,
         raise ValueError('Failed to distribute points in overlap')
 
     # Grab the source image. This is just the node with the lowest ID, nothing smart.
-    source_id = intersections[0]
-    intersections.remove(source_id)
-    res = session.query(Images).filter(Images.id == source_id).first()
-    source = NetworkNode(node_id=source_id, image_path=res.path)
+    source = nodes[0]
+    nodes.remove(source)
     source_camera = source.camera
     for v in valid:
         geom = shapely.geometry.Point(v[0], v[1])
@@ -208,22 +209,17 @@ def place_points_in_overlap(intersections, geom, height=0,
                                        measuretype=3))
 
 
-        for i, d in enumerate(intersections):
-            res = session.query(Images).filter(Images.id == d).first()
-            destination = NetworkNode(node_id=d, image_path=res.path)
-            destination_camera = destination.camera
-            dic = destination_camera.groundToImage(gnd)
+        for i, dest in enumerate(nodes):
+            dic = dest.camera.groundToImage(gnd)
             dx, dy, metrics = iterative_phase(sic.samp, sic.line, dic.samp, dic.line,
-                                              source.geodata, destination.geodata,
+                                              source.geodata, dest.geodata,
                                               **iterative_phase_kwargs)
             if dx is not None or dy is not None:
                 point.measures.append(Measures(sample=dx,
                                                line=dy,
-                                               imageid=destination['node_id'],
-                                               serial=destination.isis_serial,
+                                               imageid=dest['node_id'],
+                                               serial=dest.isis_serial,
                                                measuretype=3))
         if len(point.measures) >= 2:
             points.append(point)
-    session.add_all(points)
-    session.commit()
-    session.close()
+    return points

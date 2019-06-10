@@ -9,8 +9,9 @@ from redis import StrictRedis
 import yaml
 
 from autocnet.io.db.redis_queue import pop_computetime_push, finalize
-from autocnet.io.db.model import Overlay
+from autocnet.io.db.model import Overlay, Images
 from autocnet.spatial.overlap import place_points_in_overlap
+from autocnet.graph.node import NetworkNode
 from autocnet import Session
 
 #Load the config file
@@ -19,7 +20,7 @@ try:
         config = yaml.load(f)
 except:
     print("The 'autocnet_config' environment variable is not set.")
-    sys.exit()
+    sys.exit(1)
 
 def main(msg, config):
     session = Session()
@@ -29,11 +30,16 @@ def main(msg, config):
         print('Could not find overlap with ID', id)
         sys.exit(1)
     overlap = res.first()
-    intersections = overlap.intersections
     geom = overlap.geom
+    nodes = []
+    for id in overlap.intersections:
+        res = session.query(Images).filter(Images.id == id).first()
+        nodes.append(NetworkNode(node_id=id, image_path=res.path))
     print('Placing points in overlap', id)
-    place_points_in_overlap(overlap.intersections, overlap.geom, msg['height'],
-                            msg['iterative_phase_kwargs'])
+    points = place_points_in_overlap(nodes, overlap.geom, msg['height'],
+                                     msg['iterative_phase_kwargs'])
+    session.add_all(points)
+    session.commit()
     session.close()
 
 if __name__ == '__main__':
