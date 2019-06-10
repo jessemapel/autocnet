@@ -8,17 +8,10 @@ import sys
 from redis import StrictRedis
 import yaml
 
-from autocnet.io.db import connection
 from autocnet.io.db.redis_queue import pop_computetime_push, finalize
-from autocnet.io.db.model import Images, Measures, MeasureType, Overlay, Points, PointType
-from autocnet.matcher.subpixel import iterative_phase
-from autocnet.cg import cg as compgeom
-from autocnet.graph.node import NetworkNode
+from autocnet.io.db.model import Overlay
+from autocnet.spatial.overlap import place_points_in_overlap
 from autocnet import Session
-
-import shapely
-import csmapi
-import pyproj
 
 #Load the config file
 try:
@@ -29,68 +22,18 @@ except:
     sys.exit()
 
 def main(msg, config):
-    points = []
     session = Session()
-    semi_major = config['spatial']['semimajor_rad']
-    semi_minor = config['spatial']['semiminor_rad']
-    ecef = pyproj.Proj(proj='geocent', a=semi_major, b=semi_minor)
-    lla = pyproj.Proj(proj='latlon', a=semi_major, b=semi_minor)
-
     id = msg['id']
     res = session.query(Overlay).filter(Overlay.id == msg['id'])
     if res is None:
         print('Could not find overlap with ID', id)
-        sys.exit()
+        sys.exit(1)
     overlap = res.first()
     intersections = overlap.intersections
     geom = overlap.geom
-
-    valid = compgeom.distribute_points_in_geom(geom)
-    if not valid:
-        print('No points distributed in overlap', id)
-        sys.exit()
-
-    source = intersections[0]
-    intersections.remove(source)
-    res = session.query(Images).filter(Images.id == source).first()
-    source = NetworkNode(node_id=source, image_path=res.path)
-    source_camera = source.camera
-    for v in valid:
-        geom = shapely.geometry.Point(v[0], v[1])
-        point = Points(geom=geom,
-                       pointtype=2) # Would be 3 or 4 for ground
-
-        # Get the BCEF coordinate from the lon, lat
-        x, y, z = pyproj.transform(lla, ecef, v[0], v[1], msg['height'])  # -3000 working well in elysium, need aeroid
-        gnd = csmapi.EcefCoord(x, y, z)
-
-        # Grab the source image. This is just the node with the lowest ID, nothing smart.
-        sic = source_camera.groundToImage(gnd)
-        point.measures.append(Measures(sample=sic.samp,
-                                       line=sic.line,
-                                       imageid=source['node_id'],
-                                       serial=source.isis_serial,
-                                       measuretype=3))
-
-
-        for i, d in enumerate(intersections):
-            res = session.query(Images).filter(Images.id == d).first()
-            destination = NetworkNode(node_id=d, image_path=res.path)
-            destination_camera = destination.camera
-            dic = destination_camera.groundToImage(gnd)
-            dx, dy, metrics = iterative_phase(sic.samp, sic.line, dic.samp, dic.line,
-                                              source.geodata, destination.geodata,
-                                              **msg['iterative_phase_kwargs'])
-            if dx is not None or dy is not None:
-                point.measures.append(Measures(sample=dx,
-                                               line=dy,
-                                               imageid=destination['node_id'],
-                                               serial=destination.isis_serial,
-                                               measuretype=3))
-        if len(point.measures) >= 2:
-            points.append(point)
-    session.add_all(points)
-    session.commit()
+    print('Placing points in overlap', id)
+    place_points_in_overlap(overlap.intersections, overlap.geom, msg['height'],
+                            msg['iterative_phase_kwargs'])
     session.close()
 
 if __name__ == '__main__':

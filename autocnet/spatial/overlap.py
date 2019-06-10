@@ -1,12 +1,14 @@
 import warnings
-from autocnet import config
+from autocnet import config, Session, engine
 from autocnet.cg import cg as compgeom
+from autocnet.graph.node import NetworkNode
 from autocnet.io.db.model import Images, Measures, Overlay, Points
 from autocnet.matcher.subpixel import iterative_phase
-from autocnet import Session, engine
 
+import json
+from redis import StrictRedis
+from plurmy import Slurm
 import csmapi
-import numpy as np
 import pyproj
 import shapely
 import sqlalchemy
@@ -15,10 +17,8 @@ import sqlalchemy
 def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None, height=0,
                              iterative_phase_kwargs={'size':71}):
     """
-    Given a geometry, place points into the geometry by back-projecing using
-    a sensor model.compgeom
-
-    TODO: This shoucompgeomn once that package is stable.
+    Place points in all of the overlap geometries by back-projecing using
+    sensor models.
 
     Parameters
     ----------
@@ -102,3 +102,128 @@ def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None, height=0
                 points.append(point)
     session.add_all(points)
     session.commit()
+
+def cluster_place_points_in_overlaps(size_threshold=0.0007, height=0,
+                                     iterative_phase_kwargs={'size':71},
+                                     walltime='00:10:00'):
+    """
+    Place points in all of the overlap geometries by back-projecing using
+    sensor models. This method uses the cluster to process all of the overlaps
+    in parallel. See place_points_in_overlap.
+
+    Parameters
+    ----------
+    size_threshold : float
+        overlaps with area <= this threshold are ignored
+
+    height : numeric
+         The distance (in meters) above or below the BCBF spheroid
+
+    iterative_phase_kwargs : dict
+        Dictionary of keyword arguments for the iterative phase matcher function
+
+    walltime : str
+        Cluster job wall time as a string HH:MM:SS
+    """
+    # Get all of the overlaps over the size threshold
+    session = Session()
+    overlaps = session.query(Overlay.id, Overlay.geom, Overlay.intersections).\
+                       filter(sqlalchemy.func.ST_Area(Overlay.geom) >= size_threshold).\
+                       filter(sqlalchemy.func.array_length(Overlay.intersections, 1) > 1)
+
+    # Setup the redis queue
+    rqueue = StrictRedis(host=config['redis']['host'],
+                         port=config['redis']['port'],
+                         db=0)
+
+    # Push the job messages onto the queue
+    queuename = config['redis']['processing_queue']
+    for overlap in overlaps:
+        msg = {'id' : overlap.id,
+               'height' : height,
+               'iterative_phase_kwargs' : iterative_phase_kwargs,
+               'walltime' : walltime}
+        rqueue.rpush(queuename, json.dumps(msg))
+    job_counter = len([*overlaps]) + 1
+
+    # Submit the jobs
+    submitter = Slurm('acn_overlaps',
+                 mem_per_cpu=config['cluster']['processing_memory'],
+                 time=walltime,
+                 partition=config['cluster']['queue'],
+                 output=config['cluster']['cluster_log_dir']+'/slurm-%A_%a.out')
+    submitter.submit(array='1-{}'.format(job_counter))
+    return job_counter
+
+def place_points_in_overlap(intersections, geom, height=0,
+                            iterative_phase_kwargs={'size':71}):
+    """
+    Place points into an overlap geometry by back-projecing using sensor models.
+
+    Parameters
+    ----------
+    intersections : iterable
+        The IDs of all of the images that intersect the overlap
+
+    geom : geometry
+        The geometry of the overlap region
+
+    height : numeric
+         The distance (in meters) above or below the BCBF spheroid
+
+    iterative_phase_kwargs : dict
+        Dictionary of keyword arguments for the iterative phase matcher function
+    """
+    points = []
+    session = Session()
+    semi_major = config['spatial']['semimajor_rad']
+    semi_minor = config['spatial']['semiminor_rad']
+    ecef = pyproj.Proj(proj='geocent', a=semi_major, b=semi_minor)
+    lla = pyproj.Proj(proj='latlon', a=semi_major, b=semi_minor)
+
+    valid = compgeom.distribute_points_in_geom(geom)
+    if not valid:
+        raise ValueError('Failed to distribute points in overlap')
+
+    # Grab the source image. This is just the node with the lowest ID, nothing smart.
+    source_id = intersections[0]
+    intersections.remove(source_id)
+    res = session.query(Images).filter(Images.id == source_id).first()
+    source = NetworkNode(node_id=source_id, image_path=res.path)
+    source_camera = source.camera
+    for v in valid:
+        geom = shapely.geometry.Point(v[0], v[1])
+        point = Points(geom=geom,
+                       pointtype=2) # Would be 3 or 4 for ground
+
+        # Get the BCEF coordinate from the lon, lat
+        x, y, z = pyproj.transform(lla, ecef, v[0], v[1], height)  # -3000 working well in elysium, need aeroid
+        gnd = csmapi.EcefCoord(x, y, z)
+
+        sic = source_camera.groundToImage(gnd)
+        point.measures.append(Measures(sample=sic.samp,
+                                       line=sic.line,
+                                       imageid=source['node_id'],
+                                       serial=source.isis_serial,
+                                       measuretype=3))
+
+
+        for i, d in enumerate(intersections):
+            res = session.query(Images).filter(Images.id == d).first()
+            destination = NetworkNode(node_id=d, image_path=res.path)
+            destination_camera = destination.camera
+            dic = destination_camera.groundToImage(gnd)
+            dx, dy, metrics = iterative_phase(sic.samp, sic.line, dic.samp, dic.line,
+                                              source.geodata, destination.geodata,
+                                              **iterative_phase_kwargs)
+            if dx is not None or dy is not None:
+                point.measures.append(Measures(sample=dx,
+                                               line=dy,
+                                               imageid=destination['node_id'],
+                                               serial=destination.isis_serial,
+                                               measuretype=3))
+        if len(point.measures) >= 2:
+            points.append(point)
+    session.add_all(points)
+    session.commit()
+    session.close()
