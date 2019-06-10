@@ -31,14 +31,19 @@ except:
 def main(msg, config):
     points = []
     session = Session()
-    srid = config['spatial']['srid']
     semi_major = config['spatial']['semimajor_rad']
     semi_minor = config['spatial']['semiminor_rad']
     ecef = pyproj.Proj(proj='geocent', a=semi_major, b=semi_minor)
     lla = pyproj.Proj(proj='latlon', a=semi_major, b=semi_minor)
+
     id = msg['id']
-    intersections = msg['intersections']
-    geom = shapely.wkt.loads(msg['geom'])
+    res = session.query(Overlay).filter(Overlay.id == msg['id'])
+    if res is None:
+        print('Could not find overlap with ID', id)
+        sys.exit()
+    overlap = res.first()
+    intersections = overlap.intersections
+    geom = overlap.geom
 
     valid = compgeom.distribute_points_in_geom(geom)
     if not valid:
@@ -51,9 +56,9 @@ def main(msg, config):
     source = NetworkNode(node_id=source, image_path=res.path)
     source_camera = source.camera
     for v in valid:
-        geom = f'srid={srid};Point({v[0]} {v[1]})'
+        geom = shapely.geometry.Point(v[0], v[1])
         point = Points(geom=geom,
-                       pointtype=PointType(2)) # Would be 3 or 4 for ground
+                       pointtype=2) # Would be 3 or 4 for ground
 
         # Get the BCEF coordinate from the lon, lat
         x, y, z = pyproj.transform(lla, ecef, v[0], v[1], msg['height'])  # -3000 working well in elysium, need aeroid
@@ -65,7 +70,7 @@ def main(msg, config):
                                        line=sic.line,
                                        imageid=source['node_id'],
                                        serial=source.isis_serial,
-                                       measuretype=MeasureType(3)))
+                                       measuretype=3))
 
 
         for i, d in enumerate(intersections):
@@ -81,13 +86,11 @@ def main(msg, config):
                                                line=dy,
                                                imageid=destination['node_id'],
                                                serial=destination.isis_serial,
-                                               measuretype=MeasureType(3)))
+                                               measuretype=3))
         if len(point.measures) >= 2:
             points.append(point)
     session.add_all(points)
     session.commit()
-
-    print('hello')
     session.close()
 
 if __name__ == '__main__':
