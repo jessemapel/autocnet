@@ -194,7 +194,9 @@ def place_points_in_overlap(nodes, geom, height=0,
     source = nodes[0]
     nodes.remove(source)
     source_camera = source.camera
+    print(nodes)
     for v in valid:
+        print('processing', v)
         geom = shapely.geometry.Point(v[0], v[1])
         point = Points(geom=geom,
                        pointtype=2) # Would be 3 or 4 for ground
@@ -212,10 +214,12 @@ def place_points_in_overlap(nodes, geom, height=0,
 
 
         for i, dest in enumerate(nodes):
+            print('matching node', dest['node_id'])
             dic = dest.camera.groundToImage(gnd)
-            dx, dy, metrics = iterative_phase(sic.samp, sic.line, dic.samp, dic.line,
-                                              source.geodata, dest.geodata,
-                                              **iterative_phase_kwargs)
+            print(iterative_phase)
+            dx, dy, _ = iterative_phase(sic.samp, sic.line, dic.samp, dic.line,
+                                        source.geodata, dest.geodata,
+                                        **iterative_phase_kwargs)
             if dx is not None or dy is not None:
                 point.measures.append(Measures(sample=dx,
                                                line=dy,
