@@ -40,6 +40,7 @@ def dummy_geom():
     return Polygon([(0, 0), (0, 10), (10, 10), (10, 0)])
 
 @patch('autocnet.matcher.subpixel.iterative_phase', return_value=(0, 1, 2))
+@patch('autocnet.cg.cg.distribute_points_in_geom', return_value=[(0, 0), (5, 5), (10, 10)])
 def test_place_points_in_overlap(dummy_images, dummy_geom):
     test_nodes = dummy_images
     test_geom = dummy_geom
