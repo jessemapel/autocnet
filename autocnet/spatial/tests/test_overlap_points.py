@@ -42,7 +42,7 @@ class DummyNode:
         """
         Dummy method so that node['node_id'] works
         """
-        if key == 'node_id'
+        if key == 'node_id':
             return self.id
 
     def isis_serial(self):
@@ -52,8 +52,7 @@ class DummyNode:
         return GeoDataset()
 
 @pytest.fixture
-def dummy_data():
-    test_geom = Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])
+def dummy_images():
     first_camera = DummyCamera(csmapi.ImageCoord(1.0, 0.0))
     second_camera = DummyCamera(csmapi.ImageCoord(1.0, 1.0))
     third_camera = DummyCamera(csmapi.ImageCoord(0.0, 1.0))
@@ -62,11 +61,16 @@ def dummy_data():
                   DummyNode(first_camera, 2),
                   DummyNode(first_camera, 3),
                   DummyNode(first_camera, 4)]
-    return test_nodes, test_geom
+    return test_nodes
+
+@pytest.fixture
+def dummy_geom():
+    return Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])
 
 @patch('autocnet.matcher.subpixel.iterative_phase', return_value=(0, 1, 2))
-def test_place_points_in_overlap(dummy_data):
-    test_nodes, test_geom = dummy_data
+def test_place_points_in_overlap(dummy_images, dummy_geom):
+    test_nodes = dummy_images
+    test_geom = dummy_geom
     points = place_points_in_overlap(test_nodes, test_geom)
     for point in points:
         measure_ids = [measure.id for measure in point.measures]

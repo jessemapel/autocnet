@@ -129,6 +129,7 @@ def cluster_place_points_in_overlaps(size_threshold=0.0007, height=0,
     overlaps = session.query(Overlay.id, Overlay.geom, Overlay.intersections).\
                        filter(sqlalchemy.func.ST_Area(Overlay.geom) >= size_threshold).\
                        filter(sqlalchemy.func.array_length(Overlay.intersections, 1) > 1)
+    session.close()
 
     # Setup the redis queue
     rqueue = StrictRedis(host=config['redis']['host'],

@@ -50,4 +50,4 @@ if __name__ == '__main__':
                                conf['processing_queue'],
                                conf['working_queue'])
 
-    response = main(msg, config)
+    main(msg, config)
