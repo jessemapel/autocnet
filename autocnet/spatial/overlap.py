@@ -1,16 +1,17 @@
 import warnings
+import json
+
+from redis import StrictRedis
+import pyproj
+import shapely
+import sqlalchemy
+
 from autocnet import config, Session, engine
 from autocnet.cg import cg as compgeom
 from autocnet.io.db.model import Images, Measures, Overlay, Points
 from autocnet.matcher.subpixel import iterative_phase
-
-import json
-from redis import StrictRedis
 from plurmy import Slurm
 import csmapi
-import pyproj
-import shapely
-import sqlalchemy
 
 
 def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None, height=0,

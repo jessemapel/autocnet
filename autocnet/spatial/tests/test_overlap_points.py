@@ -1,71 +1,43 @@
 import pytest
 from unittest.mock import patch
+from unittest.mock import MagicMock
 from shapely.geometry import Polygon
 from plio.io.io_gdal import GeoDataset
 from autocnet.spatial.overlap import place_points_in_overlap
+from autocnet.graph.node import Node
 import csmapi
-
-class DummyCamera:
-    """
-    Dummy camera that always returns the same point from grount to image
-
-    Attributes
-    ----------
-    image_point : csmapi.ImagePoint
-        The image point to return
-    """
-    def __init__(self, image_point):
-        self.image_point = image_range
-
-    def groundToImage(ground_point):
-        """
-        Dummy method that always returns the same value
-        """
-        return self.image_point
-
-class DummyNode:
-    """
-    Dummy image node for testing.
-
-    Attributes
-    ----------
-    camera : AffineCamera
-        Simple affine transformation to convert ground to image
-    id : int
-        Image ID
-    """
-    def __init__(self, camera, id):
-        self.camera = camera
-        self.id = id
-
-    def __getitem__(self, key):
-        """
-        Dummy method so that node['node_id'] works
-        """
-        if key == 'node_id':
-            return self.id
-
-    def isis_serial(self):
-        return str(self.id)
-
-    def geodata(self):
-        return GeoDataset()
 
 @pytest.fixture
 def dummy_images():
-    first_camera = DummyCamera(csmapi.ImageCoord(1.0, 0.0))
-    second_camera = DummyCamera(csmapi.ImageCoord(1.0, 1.0))
-    third_camera = DummyCamera(csmapi.ImageCoord(0.0, 1.0))
-    fourth_camera = DummyCamera(csmapi.ImageCoord(0.0, 0.0))
-    test_nodes = [DummyNode(first_camera, 1),
-                  DummyNode(first_camera, 2),
-                  DummyNode(first_camera, 3),
-                  DummyNode(first_camera, 4)]
-    return test_nodes
+    first_node = MagicMock(spec=Node)
+    first_node.camera = MagicMock(spec=csmapi.RasterGm)
+    first_node.camera.groundToImage.return_value = csmapi.ImageCoord(1.0, 0.0)
+    first_node.isis_serial = '1'
+    first_node.__getitem__ = 1
+    first_node.geodata = GeoDataset()
+    second_node = MagicMock(spec=Node)
+    second_node.camera = MagicMock(spec=csmapi.RasterGm)
+    second_node.camera.groundToImage.return_value = csmapi.ImageCoord(1.0, 1.0)
+    second_node.isis_serial = '2'
+    second_node.__getitem__ = 2
+    second_node.geodata = GeoDataset()
+    third_node = MagicMock(spec=Node)
+    third_node.camera = MagicMock(spec=csmapi.RasterGm)
+    third_node.camera.groundToImage.return_value = csmapi.ImageCoord(0.0, 1.0)
+    third_node.isis_serial = '3'
+    third_node.__getitem__ = 3
+    third_node.geodata = GeoDataset()
+    fourth_node = MagicMock(spec=Node)
+    fourth_node.camera = MagicMock(spec=csmapi.RasterGm)
+    fourth_node.camera.groundToImage.return_value = csmapi.ImageCoord(0.0, 0.0)
+    fourth_node.isis_serial = '4'
+    fourth_node.__getitem__ = 4
+    fourth_node.geodata = GeoDataset()
+    return [first_node, second_node, third_node, fourth_node]
 
 @pytest.fixture
 def dummy_geom():
-    return Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])
+    return Polygon([(0, 0), (0, 10), (10, 10), (10, 0)])
 
 @patch('autocnet.matcher.subpixel.iterative_phase', return_value=(0, 1, 2))
 def test_place_points_in_overlap(dummy_images, dummy_geom):
@@ -74,7 +46,4 @@ def test_place_points_in_overlap(dummy_images, dummy_geom):
     points = place_points_in_overlap(test_nodes, test_geom)
     for point in points:
         measure_ids = [measure.id for measure in point.measures]
-        assert 1 in measure_ids
-        assert 2 in measure_ids
-        assert 3 in measure_ids
-        assert 4 in measure_ids
+        assert sorted(measure_ids) == [1, 2, 3, 4]
