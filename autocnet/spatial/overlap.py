@@ -35,7 +35,7 @@ INSERT INTO overlay(intersections, geom) SELECT row.intersections, row.geom FROM
   FROM iid GROUP BY iid.geom) AS row WHERE array_length(intersections, 1) > 1;
 """
 
-def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None,
+def place_points_in_overlaps(cg, size_threshold=0.0007,
                              iterative_phase_kwargs={'size':71}):
     """
     Place points in all of the overlap geometries by back-projecing using
@@ -51,9 +51,8 @@ def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None,
     size_threshold : float
                      overlaps with area <= this threshold are ignored
 
-    reference : int
-                the i.d. of a reference node to use when placing points. If not
-                speficied, this is the node with the lowest id
+    iterative_phase_kwargs : dict
+        Dictionary of keyword arguments for the iterative phase matcher function
     """
     if not Session:
         warnings.warn('This function requires a database connection configured via an autocnet config file.')
@@ -61,11 +60,6 @@ def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None,
 
     points = []
     session = Session()
-    srid = config['spatial']['srid']
-    semi_major = config['spatial']['semimajor_rad']
-    semi_minor = config['spatial']['semiminor_rad']
-    ecef = pyproj.Proj(proj='geocent', a=semi_major, b=semi_minor)
-    lla = pyproj.Proj(proj='latlon', a=semi_major, b=semi_minor)
     if 'dem' in config['spatial']:
         dem = config['spatial']['dem']
         gd = GeoDataset(dem)
@@ -74,65 +68,16 @@ def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None,
 
     # TODO: This should be a passable query where we can subset.
     for o in session.query(Overlay).\
-             filter(sqlalchemy.func.ST_Area(Overlay.geom) >= size_threshold):
-
-        valid = compgeom.distribute_points_in_geom(o.geom)
-        if not valid:
-            continue
-
+             filter(sqlalchemy.func.ST_Area(Overlay.geom) >= size_threshold).\
+             filter(sqlalchemy.func.array_length(Overlay.intersections, 1) > 1):
         overlaps = o.intersections
-
         if overlaps == None:
             continue
-
-        if reference is None:
-            source = overlaps[0]
-        else:
-            source = reference
-        overlaps.remove(source)
-        source = cg.node[source]['data']
-        source_camera = source.camera
-
-        for v in valid:
-            point = Points(geom=shapely.geometry.Point(*v),
-                           pointtype=2) # Would be 3 or 4 for ground
-
-            # Calculate the height, the distance (in meters) above or
-            # below the aeroid (meters above or below the BCBF spheroid).
-            if gd is None:
-                height = 0
-            else:
-                px, py = gd.latlon_to_pixel(v[1], v[0])
-                height = gd.read_array(1, [px, py, 1, 1])[0][0]
-
-            # Get the BCEF coordinate from the lon, lat
-            x, y, z = pyproj.transform(lla, ecef, v[0], v[1], height)
-            gnd = csmapi.EcefCoord(x, y, z)
-
-            # Grab the source image. This is just the node with the lowest ID, nothing smart.
-            sic = source_camera.groundToImage(gnd)
-            point.measures.append(Measures(sample=sic.samp,
-                                           line=sic.line,
-                                           imageid=source['node_id'],
-                                           serial=source.isis_serial,
-                                           measuretype=3))
+        nodes = [cg.node[id] for id in overlaps]
+        points.extend(place_points_in_overlap(nodes, o.geom, dem=gd,
+                                              iterative_phase_kwargs=iterative_phase_kwargs))
 
 
-            for i, d in enumerate(overlaps):
-                destination = cg.node[d]['data']
-                destination_camera = destination.camera
-                dic = destination_camera.groundToImage(gnd)
-                dx, dy, metrics = iterative_phase(sic.samp, sic.line, dic.samp, dic.line,
-                                                  source.geodata, destination.geodata,
-                                                  **iterative_phase_kwargs)
-                if dx is not None or dy is not None:
-                    point.measures.append(Measures(sample=dx,
-                                                   line=dy,
-                                                   imageid=destination['node_id'],
-                                                   serial=destination.isis_serial,
-                                                   measuretype=3))
-            if len(point.measures) >= 2:
-                points.append(point)
     session.add_all(points)
     session.commit()
 
@@ -157,6 +102,10 @@ def cluster_place_points_in_overlaps(size_threshold=0.0007,
     walltime : str
         Cluster job wall time as a string HH:MM:SS
     """
+    if not Session:
+        warnings.warn('This function requires a database connection configured via an autocnet config file.')
+        return
+
     # Get all of the overlaps over the size threshold
     session = Session()
     overlaps = session.query(Overlay.id, Overlay.geom, Overlay.intersections).\
