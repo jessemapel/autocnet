@@ -34,7 +34,7 @@ def test_place_points_in_overlap(point_distributer, phase_matcher):
 
     # Actual function being tested
     points = place_points_in_overlap([first_node, second_node, third_node, fourth_node],
-                                      Polygon([(0, 0), (0, 10), (10, 10), (10, 0)]))
+                                      Polygon([(0, 0), (0, 10), (10, 10), (10, 0)]), dem)
 
     # Check the function output
     assert len(points) == 3
