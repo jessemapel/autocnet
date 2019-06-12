@@ -5,6 +5,7 @@ from redis import StrictRedis
 import pyproj
 import shapely
 import sqlalchemy
+from plio.io.io_gdal import GeoDataset
 
 from autocnet import config, Session, engine
 from autocnet.cg import cg as compgeom
@@ -34,11 +35,13 @@ INSERT INTO overlay(intersections, geom) SELECT row.intersections, row.geom FROM
   FROM iid GROUP BY iid.geom) AS row WHERE array_length(intersections, 1) > 1;
 """
 
-def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None, height=0,
+def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None,
                              iterative_phase_kwargs={'size':71}):
     """
     Place points in all of the overlap geometries by back-projecing using
     sensor models.
+
+    The DEM specified in the config file will be used to calculate point elevations.
 
     Parameters
     ----------
@@ -51,10 +54,6 @@ def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None, height=0
     reference : int
                 the i.d. of a reference node to use when placing points. If not
                 speficied, this is the node with the lowest id
-
-    height : numeric
-             The distance (in meters) above or below the aeroid (meters above or
-             below the BCBF spheroid).
     """
     if not Session:
         warnings.warn('This function requires a database connection configured via an autocnet config file.')
@@ -67,6 +66,11 @@ def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None, height=0
     semi_minor = config['spatial']['semiminor_rad']
     ecef = pyproj.Proj(proj='geocent', a=semi_major, b=semi_minor)
     lla = pyproj.Proj(proj='latlon', a=semi_major, b=semi_minor)
+    if 'dem' in config['spatial']:
+        dem = config['spatial']['dem']
+        gd = GeoDataset(dem)
+    else:
+        gd = None
 
     # TODO: This should be a passable query where we can subset.
     for o in session.query(Overlay).\
@@ -88,12 +92,21 @@ def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None, height=0
         overlaps.remove(source)
         source = cg.node[source]['data']
         source_camera = source.camera
+
         for v in valid:
             point = Points(geom=shapely.geometry.Point(*v),
                            pointtype=2) # Would be 3 or 4 for ground
 
+            # Calculate the height, the distance (in meters) above or
+            # below the aeroid (meters above or below the BCBF spheroid).
+            if gd is None:
+                height = 0
+            else:
+                px, py = gd.latlon_to_pixel(v[1], v[0])
+                height = gd.read_array(1, [px, py, 1, 1])[0][0]
+
             # Get the BCEF coordinate from the lon, lat
-            x, y, z = pyproj.transform(lla, ecef, v[0], v[1], height)  # -3000 working well in elysium, need aeroid
+            x, y, z = pyproj.transform(lla, ecef, v[0], v[1], height)
             gnd = csmapi.EcefCoord(x, y, z)
 
             # Grab the source image. This is just the node with the lowest ID, nothing smart.
@@ -123,21 +136,20 @@ def place_points_in_overlaps(cg, size_threshold=0.0007, reference=None, height=0
     session.add_all(points)
     session.commit()
 
-def cluster_place_points_in_overlaps(size_threshold=0.0007, height=0,
+def cluster_place_points_in_overlaps(size_threshold=0.0007,
                                      iterative_phase_kwargs={'size':71},
                                      walltime='00:10:00'):
     """
     Place points in all of the overlap geometries by back-projecing using
     sensor models. This method uses the cluster to process all of the overlaps
-    in parallel. See place_points_in_overlap.
+    in parallel. See place_points_in_overlap and acn_overlaps.
+
+    The DEM specified in the config file will be used to calculate point elevations.
 
     Parameters
     ----------
     size_threshold : float
         overlaps with area <= this threshold are ignored
-
-    height : numeric
-         The distance (in meters) above or below the BCBF spheroid
 
     iterative_phase_kwargs : dict
         Dictionary of keyword arguments for the iterative phase matcher function
@@ -161,7 +173,6 @@ def cluster_place_points_in_overlaps(size_threshold=0.0007, height=0,
     queuename = config['redis']['processing_queue']
     for overlap in overlaps:
         msg = {'id' : overlap.id,
-               'height' : height,
                'iterative_phase_kwargs' : iterative_phase_kwargs,
                'walltime' : walltime}
         rqueue.rpush(queuename, json.dumps(msg))
@@ -176,7 +187,7 @@ def cluster_place_points_in_overlaps(size_threshold=0.0007, height=0,
     submitter.submit(array='1-{}'.format(job_counter))
     return job_counter
 
-def place_points_in_overlap(nodes, geom, height=0,
+def place_points_in_overlap(nodes, geom, dem=None,
                             iterative_phase_kwargs={'size':71}):
     """
     Place points into an overlap geometry by back-projecing using sensor models.
@@ -189,8 +200,9 @@ def place_points_in_overlap(nodes, geom, height=0,
     geom : geometry
         The geometry of the overlap region
 
-    height : numeric
-         The distance (in meters) above or below the BCBF spheroid
+    dem : GeoDataset
+         The DEM used to compute point elevations. An elevation of 0 is is used
+         if no DEM is passed in.
 
     iterative_phase_kwargs : dict
         Dictionary of keyword arguments for the iterative phase matcher function
@@ -218,6 +230,14 @@ def place_points_in_overlap(nodes, geom, height=0,
         geom = shapely.geometry.Point(v[0], v[1])
         point = Points(geom=geom,
                        pointtype=2) # Would be 3 or 4 for ground
+
+        # Calculate the height, the distance (in meters) above or
+        # below the aeroid (meters above or below the BCBF spheroid).
+        if dem is None:
+            height = 0
+        else:
+            px, py = dem.latlon_to_pixel(v[1], v[0])
+            height = dem.read_array(1, [px, py, 1, 1])[0][0]
 
         # Get the BCEF coordinate from the lon, lat
         x, y, z = pyproj.transform(lla, ecef, v[0], v[1], height)  # -3000 working well in elysium, need aeroid
