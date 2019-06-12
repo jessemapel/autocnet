@@ -28,6 +28,9 @@ def test_place_points_in_overlap(point_distributer, phase_matcher):
     fourth_node.camera.groundToImage.return_value = csmapi.ImageCoord(0.0, 0.0)
     fourth_node.isis_serial = '4'
     fourth_node.__getitem__.return_value = 4
+    dem = MagicMock()
+    dem.latlon_to_pixel.return_value = (1.0, 1.0)
+    dem.read_array.return_value = [[0.0]]
 
     # Actual function being tested
     points = place_points_in_overlap([first_node, second_node, third_node, fourth_node],
@@ -43,6 +46,8 @@ def test_place_points_in_overlap(point_distributer, phase_matcher):
 
     # Check the mocks
     point_distributer.assert_called_with(Polygon([(0, 0), (0, 10), (10, 10), (10, 0)]))
+    dem.latlon_to_pixel.assert_called()
+    dem.read_array.assert_called()
     first_node.camera.groundToImage.assert_called()
     second_node.camera.groundToImage.assert_called()
     third_node.camera.groundToImage.assert_called()

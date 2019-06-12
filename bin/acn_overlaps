@@ -35,8 +35,13 @@ def main(msg, config):
     for id in overlap.intersections:
         res = session.query(Images).filter(Images.id == id).first()
         nodes.append(NetworkNode(node_id=id, image_path=res.path))
+    if 'dem' in config['spatial']:
+        dem = config['spatial']['dem']
+        gd = GeoDataset(dem)
+    else:
+        gd = None
     print('Placing points in overlap', id)
-    points = place_points_in_overlap(nodes, overlap.geom, msg['height'],
+    points = place_points_in_overlap(nodes, overlap.geom, gd,
                                      msg['iterative_phase_kwargs'])
     session.add_all(points)
     session.commit()
