@@ -510,7 +510,6 @@ class NetworkNode(Node):
         # For now, just use the PATH to determine if the node/image is in the DB
         res = session.query(Images).filter(Images.path == kwargs['image_path']).first()
         if res is None:
-            print('inserting', kwargs['image_path'])
             kpspath = io_keypoints.create_output_path(self.geodata.file_name)
 
             # Create the keypoints entry
