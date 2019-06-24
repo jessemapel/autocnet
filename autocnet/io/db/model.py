@@ -264,12 +264,8 @@ class Points(BaseMixin, Base):
     identifier = Column(String, unique=True)
     _geom = Column("geom", Geometry('POINT', srid=latitudinal_srid, dimension=2, spatial_index=True))
     active = Column(Boolean, default=True)
-    apriorix = Column(Float)
-    aprioriy = Column(Float)
-    aprioriz = Column(Float)
-    adjustedx = Column(Float)
-    adjustedy = Column(Float)
-    adjustedz = Column(Float)
+    apriori = Column(Geometry('POINT', srid=rectangular_srid, dimension=3))
+    adjusted = Column(Geometry('POINT', srid=rectangular_srid, dimension=3))
     measures = relationship('Measures')
     rms = Column(Float)
 
@@ -334,7 +330,7 @@ class Measures(BaseMixin, Base):
         self._measuretype = v
 
 if Session:
-    from autocnet.io.db.triggers import valid_point_function, valid_point_trigger, valid_geom_function, valid_geom_trigger
+    from autocnet.io.db.triggers import valid_point_function, valid_point_trigger, update_point_function, update_point_trigger, valid_geom_function, valid_geom_trigger
     # Create the database
     if not database_exists(engine.url):
         create_database(engine.url, template='template_postgis')  # This is a hardcode to the local template
@@ -343,6 +339,8 @@ if Session:
         # based on the point count.
         event.listen(Base.metadata, 'before_create', valid_point_function)
         event.listen(Measures.__table__, 'after_create', valid_point_trigger)
+        event.listen(Base.metadata, 'before_create', update_point_function)
+        event.listen(Images.__table__, 'after_create', update_point_trigger)
         event.listen(Base.metadata, 'before_create', valid_geom_function)
         event.listen(Images.__table__, 'after_create', valid_geom_trigger)
 
