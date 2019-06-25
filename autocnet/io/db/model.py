@@ -278,10 +278,8 @@ class Points(BaseMixin, Base):
 
     @geom.setter
     def geom(self, geom):
-        if geom:
-            self._geom = from_shape(geom, srid=latitudinal_srid)
-        else:
-            self._geom = geom
+        raise TypeError("The geom column for Points cannot be set." \
+                        " Set the adjusted column to update the geom.")
 
     @hybrid_property
     def apriori(self):
