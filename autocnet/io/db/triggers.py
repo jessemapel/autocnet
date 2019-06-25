@@ -62,7 +62,6 @@ EXECUTE PROCEDURE validate_points();
 """)
 
 latitudinal_srid = config['spatial']['latitudinal_srid']
-rectangular_srid = config['spatial']['rectangular_srid']
 
 update_point_function = DDL("""
 CREATE OR REPLACE FUNCTION update_points()
