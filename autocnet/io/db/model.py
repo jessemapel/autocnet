@@ -264,8 +264,8 @@ class Points(BaseMixin, Base):
     identifier = Column(String, unique=True)
     _geom = Column("geom", Geometry('POINT', srid=latitudinal_srid, dimension=2, spatial_index=True))
     active = Column(Boolean, default=True)
-    apriori = Column(Geometry('POINT', srid=rectangular_srid, dimension=3))
-    adjusted = Column(Geometry('POINT', srid=rectangular_srid, dimension=3))
+    _apriori = Column("apriori", Geometry('POINTZ', srid=rectangular_srid, dimension=3, spatial_index=False))
+    _adjusted = Column("adjusted", Geometry('POINTZ', srid=rectangular_srid, dimension=3, spatial_index=False))
     measures = relationship('Measures')
     rms = Column(Float)
 
@@ -280,6 +280,36 @@ class Points(BaseMixin, Base):
     def geom(self, geom):
         if geom:
             self._geom = from_shape(geom, srid=latitudinal_srid)
+        else:
+            self._geom = geom
+
+    @hybrid_property
+    def apriori(self):
+        try:
+            return to_shape(self._apriori)
+        except:
+            return self._apriori
+
+    @apriori.setter
+    def apriori(self, apriori):
+        if apriori:
+            self._apriori = from_shape(apriori, srid=rectangular_srid)
+        else:
+            self._apriori = apriori
+
+    @hybrid_property
+    def adjusted(self):
+        try:
+            return to_shape(self._adjusted)
+        except:
+            return self._adjusted
+
+    @adjusted.setter
+    def adjusted(self, adjusted):
+        if adjusted:
+            self._adjusted = from_shape(adjusted, srid=rectangular_srid)
+        else:
+            self._adjusted = adjusted
 
     @hybrid_property
     def pointtype(self):

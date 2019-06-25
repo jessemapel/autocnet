@@ -69,19 +69,21 @@ CREATE OR REPLACE FUNCTION update_points()
   RETURNS trigger AS
 $BODY$
 BEGIN
-  UPDATE points
-  SET NEW.geom = ST_AsText(ST_Transform(ST_GeomFromText(NEW.adjusted, {}), {}))
-  WHERE points.id = NEW.pointid;
+    NEW.geom = ST_Force_2D(ST_Transform(NEW.adjusted, {}));
+    RETURN NEW;
+  EXCEPTION WHEN OTHERS THEN
+    NEW.geom = Null;
+    RETURN NEW;
 END;
 $BODY$
 
 LANGUAGE plpgsql VOLATILE -- Says the function is implemented in the plpgsql language; VOLATILE says the function has side effects.
 COST 100; -- Estimated execution cost of the function.
-""".format(rectangular_srid, latitudinal_srid))
+""".format(latitudinal_srid))
 
 update_point_trigger = DDL("""
-CREATE TRIGGER active_measure_changes
-  AFTER INSERT OR UPDATE
+CREATE TRIGGER point_inserted
+  BEFORE INSERT OR UPDATE
   ON points
   FOR EACH ROW
 EXECUTE PROCEDURE update_points();
