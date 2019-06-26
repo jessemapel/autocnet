@@ -133,7 +133,6 @@ def test_create_point(session, data):
 def test_create_point_geom(session, data, expected):
     p = model.Points.create(session, **data)
     resp = session.query(model.Points).filter(model.Points.id == p.id).first()
-    print(resp.geom)
     assert resp.geom == expected
 
 @pytest.mark.parametrize("data, new_adjusted, expected", [
@@ -146,7 +145,6 @@ def test_update_point_geom(session, data, new_adjusted, expected):
     p.adjusted = new_adjusted
     session.commit()
     resp = session.query(model.Points).filter(model.Points.id == p.id).first()
-    print(resp.geom)
     assert resp.geom == expected
 
 def test_measures_exists(tables):
