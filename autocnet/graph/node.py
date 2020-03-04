@@ -65,6 +65,7 @@ class Node(dict, MutableMapping):
         self['node_id'] = node_id
         self['hash'] = image_name
         self.masks = pd.DataFrame()
+        self.ignore = False
 
     @property
     def camera(self):
