@@ -66,9 +66,7 @@ CREATE OR REPLACE FUNCTION ignore_image()
   RETURNS trigger AS
 $BODY$
 BEGIN
- IF (SELECT IGNORE
-   FROM IMAGES
-   WHERE path = NEW.path)
+ IF NEW.ignore
  THEN
    UPDATE measures
      SET "measureIgnore" = True
