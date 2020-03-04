@@ -54,6 +54,9 @@ class Node(dict, MutableMapping):
     masks : set
             A list of the available masking arrays
 
+    ignore : bool
+             If the image is flagged as ignored and will be skipped in processing
+
     isis_serial : str
                   If the input images have PVL headers, generate an
                   ISIS compatible serial number
@@ -698,12 +701,18 @@ class NetworkNode(Node):
 
     @property
     def ignore(self):
+        """
+        Gets the ignore flag from the Images table
+        """
         session = Session()
         res = self._from_db(Images, key='id')
         return res.ignore
 
     @ignore.setter
     def ignore(self, ignore):
+        """
+        Sets the ignore flag in the Images table
+        """
         session = Session()
         res = session.query(Images).filter(getattr(Images,'id') == self['node_id']).first()
         res.ignore = ignore
