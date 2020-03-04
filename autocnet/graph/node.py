@@ -695,6 +695,20 @@ class NetworkNode(Node):
         session.close()
         return res
 
+    @property
+    def ignore(self):
+        session = Session()
+        res = self._from_db(Images, key='id')
+        return res.ignore
+
+    @ignore.setter
+    def ignore(self, ignore):
+        session = Session()
+        res = session.query(Images).filter(getattr(Images,'id') == self['node_id']).first()
+        res.ignore = ignore
+        session.commit()
+        session.close()
+
     def generate_vrt(self, **kwargs):
         """
         Using the image footprint, generate a VRT to that is usable inside
