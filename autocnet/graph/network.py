@@ -627,8 +627,9 @@ class CandidateGraph(nx.Graph):
         if options[on] == self.edges_iter:
             obj = 2
         for elem in options[on](data=True):
-            if hasattr(elem, 'ignore') and getattr(elemen, 'ignore'):
-                res.append(function(elem[obj], *args, **kwargs))
+            if hasattr(elem[obj], 'ignore') and getattr(elem[obj], 'ignore'):
+                continue
+            res.append(function(elem[obj], *args, **kwargs))
 
         if out:
             out = res
