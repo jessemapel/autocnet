@@ -198,3 +198,26 @@ def test_fix_bad_geom(session):
     resp = session.query(model.Images).filter(model.Images.id==i.id).one()
     assert resp.ignore == False
     assert resp.geom == MultiPolygon([Polygon([(0,0), (0,1), (1,1), (1,0), (0,0) ])])
+
+@pytest.mark.parametrize("measure_data, point_data, image_data", [(
+    {'id': [1, 2, 3, 4],
+     'pointid': [1, 1, 1, 1],
+     'imageid': [1, 2, 3, 4],
+     'serial': ['ISISSERIAL1', 'ISISSERIAL2', 'ISISSERIAL3', 'ISISSERIAL4'],
+     'measuretype': [3, 3, 3, 3],
+     'sample': [0, 0, 0, 0],
+     'line': [0, 0, 0, 0]},
+    {'id':1,
+     'pointtype':2},
+    {'id':[1, 2, 3, 4],
+    'serial': ['ISISSERIAL1', 'ISISSERIAL2', 'ISISSERIAL3', 'ISISSERIAL4']})])
+def test_ignore_image(session, measure_data, point_data, image_data):
+    model.Images.create(session, **image_data)
+    model.Points.create(session, **point_data)
+    model.Measures.create(session, **measure_data)
+    image_resp = session.query(model.Images).filter(model.Images.id == 1).first()
+    image_resp.ignore = True
+    ignored_measures_resp = session.query(model.Measures).filter(model.Measures.ignore == True).first()
+    assert ignored_measures_resp.imageid == 1
+    valid_measures_resp = session.query(model.Measures).filter(model.Measures.ignore == False)
+    assert len(valid_measures_resp) == 3
