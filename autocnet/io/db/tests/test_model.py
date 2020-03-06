@@ -221,4 +221,4 @@ def test_ignore_image(session, measure_data, point_data, image_data):
     ignored_measures_resp = session.query(model.Measures).filter(model.Measures.ignore == True).first()
     assert ignored_measures_resp.imageid == 1
     valid_measures_resp = session.query(model.Measures).filter(model.Measures.ignore == False)
-    assert len(valid_measures_resp) == 3
+    assert valid_measures_resp.count() == 3
