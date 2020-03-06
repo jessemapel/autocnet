@@ -70,7 +70,7 @@ BEGIN
  THEN
    UPDATE measures
      SET "measureIgnore" = True
-     WHERE measure.serialnumber = NEW.serial;
+     WHERE measures.serialnumber = NEW.serial;
  END IF;
 
  RETURN NEW;
