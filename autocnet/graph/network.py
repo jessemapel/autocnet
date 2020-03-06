@@ -585,7 +585,7 @@ class CandidateGraph(nx.Graph):
     def apply(self, function, on='edge', out=None, args=(), **kwargs):
         """
         Applys a function to every node or edge, returns collected return
-        values. If applying to functions to nodes, then all ignored nodes
+        values. If applying a functions to nodes, then all ignored nodes
         will be skipped.
 
         TODO: Merge with apply_func_to_edges?
@@ -627,7 +627,7 @@ class CandidateGraph(nx.Graph):
         if options[on] == self.edges_iter:
             obj = 2
         for elem in options[on](data=True):
-            if hasattr(elem[obj], 'ignore') and getattr(elem[obj], 'ignore'):
+            if getattr(elem[obj], 'ignore', False):
                 continue
             res.append(function(elem[obj], *args, **kwargs))
 

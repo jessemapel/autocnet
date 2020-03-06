@@ -714,7 +714,7 @@ class NetworkNode(Node):
         Sets the ignore flag in the Images table
         """
         session = Session()
-        res = session.query(Images).filter(getattr(Images,'id') == self['node_id']).first()
+        res = session.query(Images).filter(getattr(Images,'id') == self['node_id']).one()
         res.ignore = ignore
         session.commit()
         session.close()
