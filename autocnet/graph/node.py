@@ -13,7 +13,7 @@ from skimage.transform import resize
 import shapely
 from knoten.csm import generate_latlon_footprint, generate_vrt, create_camera, generate_boundary
 
-from autocnet import Session, engine, config
+from autocnet import config
 from autocnet.matcher import cpu_extractor as fe
 from autocnet.matcher import cpu_outlier_detector as od
 from autocnet.cg import cg
@@ -495,16 +495,16 @@ class Node(dict, MutableMapping):
         return shapely.geometryPolygon(reproj)
 
 class NetworkNode(Node):
-    def __init__(self, *args, parent=None, **kwargs):
+    def __init__(self, *args, session_maker=None, **kwargs):
         super(NetworkNode, self).__init__(*args, **kwargs)
         # If this is the first time that the image is seen, add it to the DB
-        if parent is None:
-            self.parent = Parent(config['database'])
+        if session_maker is None:
+            self.session_maker, _ = new_connection(None)
         else:
-            self.parent = parent
+            self.session_maker = session_maker
 
         # Create a session to work in
-        session = Session()
+        session = self.session_maker()
 
         # For now, just use the PATH to determine if the node/image is in the DB
         res = session.query(Images).filter(Images.path == kwargs['image_path']).first()
@@ -529,7 +529,7 @@ class NetworkNode(Node):
                        cameras=cam,
                        serial=self.isis_serial,
                        cam_type=cam_type)
-            session = Session()
+            session = self.session_maker()
             session.add(i)
             session.commit()
             session.close()
@@ -553,7 +553,7 @@ class NetworkNode(Node):
         """
         if 'node_id' not in self.keys():
             return
-        session = Session()
+        session = self.session_maker()
         res = session.query(table_obj).filter(getattr(table_obj,key) == self['node_id']).first()
         session.close()
         return res
@@ -574,7 +574,7 @@ class NetworkNode(Node):
 
     @keypoints.setter
     def keypoints(self, kps):
-        session = Session()
+        session = self.session_maker()
         io_keypoints.to_hdf(self.keypoint_file, keypoints=kps)
         res = session.query(Keypoints).filter(getattr(Keypoints,'image_id') == self['node_id']).first()
 
@@ -650,7 +650,7 @@ class NetworkNode(Node):
 
     @property
     def footprint(self):
-        session = Session()
+        session = self.session_maker()
         res = session.query(Images).filter(Images.id == self['node_id']).first()
         session.close()
         # not in database, create footprint
@@ -682,7 +682,7 @@ class NetworkNode(Node):
 
     @property
     def points(self):
-        session = Session()
+        session = self.session_maker()
         pids = session.query(Measures.pointid).filter(Measures.imageid == self['node_id']).all()
         res = session.query(Points).filter(Points.id.in_(pids)).all()
         session.close()
@@ -690,7 +690,7 @@ class NetworkNode(Node):
 
     @property
     def measures(self):
-        session = Session()
+        session = self.session_maker()
         res = session.query(Measures).filter(Measures.imageid == self['node_id']).all()
         session.close()
         return res

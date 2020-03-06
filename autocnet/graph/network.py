@@ -3,6 +3,7 @@ import itertools
 import json
 import math
 import os
+import socket
 from shutil import copyfile
 from time import gmtime, strftime, time
 import warnings
@@ -28,7 +29,7 @@ from plio.io import io_controlnetwork as cnet
 
 from plurmy import Slurm
 
-from autocnet import Session, engine, config
+from autocnet import config
 from autocnet.cg import cg
 from autocnet.graph import markov_cluster
 from autocnet.graph.edge import Edge, NetworkEdge
@@ -36,7 +37,7 @@ from autocnet.graph.node import Node, NetworkNode
 from autocnet.io import network as io_network
 from autocnet.io.db.model import (Images, Keypoints, Matches, Cameras, Points,
                                   Base, Overlay, Edges, Costs, Measures, JsonEncoder)
-from autocnet.io.db.connection import new_connection, Parent
+from autocnet.io.db.connection import new_connection
 from autocnet.vis.graph_view import plot_graph, cluster_plot
 from autocnet.control import control
 from autocnet.spatial.overlap import compute_overlaps_sql
@@ -87,7 +88,7 @@ class CandidateGraph(nx.Graph):
         'keypoint_index' : int
     }
 
-    def __init__(self, *args, basepath=None, node_id_map=None, overlaps=False, **kwargs):
+    def __init__(self, *args, basepath=None, node_id_map=None, overlaps=False, node_kwargs = {}, edge_kwargs = {}, **kwargs):
         super(CandidateGraph, self).__init__(*args, **kwargs)
 
         self.graph['creationdate'] = strftime("%Y-%m-%d %H:%M:%S", gmtime())
@@ -114,7 +115,7 @@ class CandidateGraph(nx.Graph):
                 self.graph['node_counter'] += 1
 
             n['data'] = self.node_factory(
-                image_name=i, image_path=image_path, node_id=node_id)
+                image_name=i, image_path=image_path, node_id=node_id, **node_kwargs)
 
             self.graph['node_name_map'][i] = node_id
 
@@ -124,7 +125,7 @@ class CandidateGraph(nx.Graph):
             if s > d:
                 s, d = d, s
             edge = self.edge_factory(
-                self.nodes[s]['data'], self.nodes[d]['data'])
+                self.nodes[s]['data'], self.nodes[d]['data'], **edge_kwargs)
             # Unidrected graph - both representation point at the same data
             self.edges[s, d]['data'] = edge
             self.edges[d, s]['data'] = edge
@@ -1305,8 +1306,14 @@ class NetworkCandidateGraph(CandidateGraph):
     node_factory = NetworkNode
     edge_factory = NetworkEdge
 
-    def __init__(self, *args, **kwargs):
-        super(NetworkCandidateGraph, self).__init__(*args, **kwargs)
+    def __init__(self, *args, db_config=None, **kwargs):
+        # Setup the database connection before calling the CandidateGraph init
+        # method so that nodes and edges can use it.
+        self.session_maker, self.engine = new_connection(db_config)
+        super(NetworkCandidateGraph, self).__init__(*args,
+                                                    node_kwargs={'session_maker' = self.session_maker},
+                                                    edge_kwargs={'session_maker' = self.session_maker},
+                                                    **kwargs)
         if config.get('redis', None):
             self._setup_queues()
         # Job metadata
@@ -1321,6 +1328,7 @@ class NetworkCandidateGraph(CandidateGraph):
         redis = config.get('redis')
         if redis:
             self.processing_queue = redis['processing_queue']
+
 
     def _setup_queues(self):
         """
@@ -1353,7 +1361,7 @@ class NetworkCandidateGraph(CandidateGraph):
         sql : str
               The SQL string to be passed to the DB engine and executed.
         """
-        conn = engine.connect()
+        conn = self.engine.connect()
         conn.execute(sql)
         conn.close()
 
@@ -1514,7 +1522,7 @@ WHERE
 
         """
 
-        df = pd.read_sql(sql, engine)
+        df = pd.read_sql(sql, self.engine)
 
         #create columns in the dataframe; zeros ensure plio (/protobuf) will
         #ignore unless populated with alternate values
@@ -1571,7 +1579,7 @@ WHERE
         data_to_update['id'] = data_to_update['id'].apply(lambda row : int(row))
 
         # Generate a temp table, update the real table, then drop the temp table
-        data_to_update.to_sql('temp_measures', engine, if_exists='replace', index_label='serialnumber', index = False)
+        data_to_update.to_sql('temp_measures', self.engine, if_exists='replace', index_label='serialnumber', index = False)
 
         sql = """
         UPDATE measures AS f
@@ -1586,7 +1594,7 @@ WHERE
         session.commit()
 
     @classmethod
-    def from_filelist(cls, filelist, clear_db=False):
+    def from_filelist(cls, filelist, clear_db=False, db_config=None):
         """
         Parse a filelist to add nodes to the database. Using the
         information in the database, then instantiate a complete,
@@ -1622,7 +1630,7 @@ WHERE
             image_name = os.path.basename(f)
             NetworkNode(image_path=f, image_name=image_name)
 
-        obj = cls.from_database()
+        obj = cls.from_database(db_config=db_config)
         # Execute the computation to compute overlapping geometries
         obj._execute_sql(compute_overlaps_sql)
 
@@ -1641,7 +1649,7 @@ WHERE
         if not os.path.exists(newdir):
             os.makedirs(newdir)
 
-        session = Session()
+        session = self.session_maker()
         images = session.query(Images).all()
         oldnew = []
         for obj in images:
@@ -1656,7 +1664,7 @@ WHERE
         [copyfile(old, new) for old, new in oldnew]
 
     @classmethod
-    def from_remote_database(cls, source_db_config, path,  query_string='SELECT * FROM public.images LIMIT 10'):
+    def from_remote_database(cls, source_db_config, path,  query_string='SELECT * FROM public.images LIMIT 10', destination_db_config=None):
         """
         This is a constructor that takes an existing database containing images and sensors,
         copies the selected rows into the project specified in the autocnet_config variable,
@@ -1706,12 +1714,13 @@ WHERE
         >>> ncg = NetworkCandidateGraph.from_remote_database(source_db_config, outpath, query_string=query)
         """
 
-        sourceSession, _ = new_connection(source_db_config)
-        sourcesession = sourceSession()
+        source_session_maker, _ = new_connection(source_db_config)
+        sourcesession = source_session_maker()
 
         sourceimages = sourcesession.execute(query_string).fetchall()
 
-        destinationsession = Session()
+        destination_session_maker, _ = new_connection(destination_db_config)
+        destinationsession = destination_session_maker()
         destinationsession.execute(Images.__table__.insert(), sourceimages)
 
         # Get the camera objects to manually join. Keeps the caller from
@@ -1726,13 +1735,13 @@ WHERE
         sourcesession.close()
 
         # Create the graph, copy the images, and compute the overlaps
-        obj = cls.from_database()
+        obj = cls.from_database(db_config=db_config)
         obj.copy_images(path)
         obj._execute_sql(compute_overlaps_sql)
         return obj
 
     @classmethod
-    def from_database(cls, query_string='SELECT * FROM public.images'):
+    def from_database(cls, query_string='SELECT * FROM public.images', db_config=None):
         """
         This is a constructor that takes the results from an arbitrary query string,
         uses those as a subquery into a standard polygon overlap query and
@@ -1771,7 +1780,8 @@ WHERE
         WHERE ST_INTERSECTS(i1.geom, i2.geom) = TRUE
         AND i1.id < i2.id'''.format(query_string)
 
-        session = Session()
+        session_maker, _ = new_connection(db_config)
+        session = session_maker()
         res = session.execute(composite_query)
 
         adjacency = defaultdict(list)
@@ -1785,12 +1795,12 @@ WHERE
                 adjacency[spath].append(dpath)
         session.close()
         # Add nodes that do not overlap any images
-        obj = cls(adjacency, node_id_map=adjacency_lookup, config=config)
+        obj = cls(adjacency, node_id_map=adjacency_lookup, config=config, db_config=db_config)
 
         return obj
 
     @staticmethod
-    def clear_db(tables=None):
+    def clear_db(tables=None, db_config=None):
         """
         Truncate all of the database tables and reset any
         autoincrement columns to start with 1.
@@ -1800,13 +1810,14 @@ WHERE
         table : str or list of str, optional
                 the table name of a list of table names to truncate
         """
-        session = Session()
+        session_maker, _ = new_connection(db_config)
+        session = session_maker()
         session.rollback() # In case any transactions are not done
         if tables:
             if isinstance(tables, str):
                 tables = [tables]
         else:
-            tables = engine.table_names()
+            tables = self.engine.table_names()
 
         for t in tables:
           if t != 'spatial_ref_sys':
@@ -1826,7 +1837,7 @@ WHERE
 
         cnetpoints = cnet.groupby('id')
         points = []
-        session = Session()
+        session = self.session_maker()
 
         for id, cnetpoint in cnetpoints:
             def get_measures(row):
@@ -1876,7 +1887,7 @@ WHERE
 
     @property
     def measures(self):
-        df = pd.read_sql_table('measures', con=engine)
+        df = pd.read_sql_table('measures', con=self.engine)
         return df
 
     @property

@@ -9,7 +9,7 @@ from scipy.spatial.distance import cdist
 from shapely.geometry import Point
 import sqlalchemy
 
-from autocnet import Session, engine
+from autocnet import engine
 from autocnet.graph.node import Node
 from autocnet.utils import utils
 from autocnet.matcher import cpu_outlier_detector as od
@@ -721,13 +721,17 @@ class Edge(dict, MutableMapping):
 class NetworkEdge(Edge):
 
     default_msg = {'sidx':None,
-                    'didx':None,
-                    'task':None,
-                    'param_step':0,
-                    'success':False}
+                   'didx':None,
+                   'task':None,
+                   'param_step':0,
+                   'success':False}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, session_maker=None, **kwargs):
         super(NetworkEdge, self).__init__(*args, **kwargs)
+        if session_maker is None:
+            self.session_maker, _ = new_connection(None)
+        else:
+            self.session_maker = session_maker
         self.job_status = defaultdict(dict)
 
     def _from_db(self, table_obj):
@@ -740,7 +744,7 @@ class NetworkEdge(Edge):
         table_obj : object
                     The declared table class (from db.model)
         """
-        session = Session()
+        session = self.session_maker()
         res = session.query(table_obj).\
                filter(table_obj.source == self.source['node_id']).\
                filter(table_obj.destination == self.destination['node_id'])
@@ -749,7 +753,7 @@ class NetworkEdge(Edge):
 
     @property
     def masks(self):
-        session = Session()
+        session = self.session_maker()
         res = session.query(Edges.masks).\
                                         filter(Edges.source == self.source['node_id']).\
                                         filter(Edges.destination == self.destination['node_id']).\
@@ -778,7 +782,7 @@ class NetworkEdge(Edge):
 
 
         df = pd.DataFrame(v)
-        session = Session()
+        session = self.session_maker()
         res = session.query(Edges).\
                                 filter(Edges.source == self.source['node_id']).\
                                 filter(Edges.destination == self.destination['node_id']).first()
@@ -795,7 +799,7 @@ class NetworkEdge(Edge):
     def costs(self):
         # these are np.float coming out, sqlalchemy needs ints
         ids = list(map(int, self.matches.index.values))
-        session = Session()
+        session = self.session_maker()
         res = session.query(Costs).filter(Costs.match_id.in_(ids)).all()
         #qf = q.filter(Costs.match_id.in_(ids))
         session.close()
@@ -814,7 +818,7 @@ class NetworkEdge(Edge):
     def costs(self, v):
         to_db_add = []
         # Get the query obj
-        session = Session()
+        session = self.session_maker()
         q = session.query(Costs)
         # Need the new instance here to avoid __setattr__ issues
         df = pd.DataFrame(v)
@@ -849,7 +853,7 @@ class NetworkEdge(Edge):
 
     @property
     def matches(self):
-        session = Session()
+        session = self.session_maker()
         q = session.query(Matches)
         qf = q.filter(Matches.source == self.source['node_id'],
                       Matches.destination == self.destination['node_id'])
@@ -867,7 +871,7 @@ class NetworkEdge(Edge):
         df = pd.DataFrame(v)
         df.index.name = v.index.name
         # Get the query obj
-        session = Session()
+        session = self.session_maker()
         q = session.query(Matches)
         for idx, row in df.iterrows():
             # Determine if this is an update or the addition of a new row
@@ -912,7 +916,7 @@ class NetworkEdge(Edge):
 
     @matches.deleter
     def matches(self):
-        session = Session()
+        session = self.session_maker()
         session.query(Matches).filter(Matches.source == self.source['node_id'], Matches.destination == self.destination['node_id']).delete()
         session.commit()
         session.close()
@@ -928,7 +932,7 @@ class NetworkEdge(Edge):
     def ring(self, ring):
         # Setters need a single session and so should not make use of the
         # syntax sugar _from_db
-        session = Session()
+        session = self.session_maker()
         res = session.query(Edges).\
                filter(Edges.source == self.source['node_id']).\
                filter(Edges.destination == self.destination['node_id']).first()
@@ -959,7 +963,7 @@ class NetworkEdge(Edge):
 
     @fundamental_matrix.setter
     def fundamental_matrix(self, v):
-        session = Session()
+        session = self.session_maker()
         res = session.query(Edges).\
                filter(Edges.source == self.source['node_id']).\
                filter(Edges.destination == self.destination['node_id']).first()
@@ -981,7 +985,7 @@ class NetworkEdge(Edge):
 
     @property
     def measures(self):
-        session = Session()
+        session = self.session_maker()
         res = session.query(Measures).filter(sqlalchemy.or_(Measures.imageid == self.source['node_id'], Measures.imageid == self.destination['node_id'])).all()
         session.close()
         return res
@@ -1012,7 +1016,7 @@ class NetworkEdge(Edge):
         if source > destin:
             source, destin = destin, source
 
-        session = Session()
+        session = self.session_maker()
         q = session.query(Points.id,
                   Points.pointtype,
                   Measures.id.label('mid'),
@@ -1075,7 +1079,7 @@ class NetworkEdge(Edge):
         """
         mask = self.masks[mask]
         matches_to_disable = mask[mask == False].index
-        session = Session()
+        session = self.session_maker()
 
         bad = {}
         for o in session.query(Matches).filter(Matches.id.in_(matches_to_disable)).all():
