@@ -210,6 +210,10 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
         if cam_type == "isis":
             p = isis.point_info(node["image_path"], newsample, newline, point_type="image")
             x, y, z = p["GroundPoint"]["BodyFixedCoordinate"].value
+            if p["GroundPoint"]["BodyFixedCoordinate"].units.lower() == "km":
+                x = x * 1000
+                y = y * 1000
+                z = z * 1000
         elif cam_type == "csm":
             image_coord = csmapi.ImageCoord(newline, newsample)
             pcoord = node.camera.imageToGround(image_coord)
