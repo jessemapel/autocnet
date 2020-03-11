@@ -103,7 +103,7 @@ class Node(dict, MutableMapping):
     def ignore(self):
         if not hasattr(self, '_ignore'):
             self._ignore = False
-        return res._ignore
+        return self._ignore
 
     @ignore.setter
     def ignore(self, ignore):
