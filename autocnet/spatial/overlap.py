@@ -233,13 +233,6 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
             x, y, z = reproject([lon, lat, height], semi_major, semi_minor,
                                 'latlon', 'geocent')
 
-        # Check that the point is still in the overlap
-        lon, lat, _ = reproject([x, y, z], semi_major, semi_minor,
-                                'geocent', 'latlon')
-        if not geom.contains(shapely.geometry.Point(lon, lat)):
-            warnings.warn('Reference point shifted outside of overlap, skipping point')
-            continue
-
         geom = shapely.geometry.Point(x, y, z)
         point = Points(apriori=geom,
                        adjusted=geom,
