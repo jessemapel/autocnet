@@ -34,6 +34,7 @@ def point_info(cube_path, x, y, point_type, allow_outside=False):
       Pvl object containing campt returns
     """
     point_type = point_type.lower()
+    print(f'Getting point info for {cube_path} of type {point_type} at {x} {y}')
 
     if point_type not in {"image", "ground"}:
         raise Exception(f'{point_type} is not a valid point type, valid types are ["image", "ground"]')
@@ -53,13 +54,16 @@ def point_info(cube_path, x, y, point_type, allow_outside=False):
             x = np.add(x, .5)
             y = np.add(y, .5)
 
+        print(f'Writing point info to file {f.name}')
         f.write("\n".join(["{}, {}".format(xval,yval) for xval,yval in zip(x, y)]))
         f.flush()
+        print(f'Running campt')
         try:
             pvlres = isis.campt(from_=cube_path, coordlist=f.name, allowoutside=allow_outside, usecoordlist=True, coordtype=point_type)
         except ProcessError as e:
             warn(f"CAMPT call failed, image: {cube_path}\n{e.stderr}")
             return
+        print('campt output:\n', pvlres)
 
         pvlres = pvl.loads(pvlres)
         if len(x) > 1 and len(y) > 1:
@@ -70,7 +74,6 @@ def point_info(cube_path, x, y, point_type, allow_outside=False):
         else:
             pvlres["GroundPoint"]["Sample"] -= .5
             pvlres["GroundPoint"]["Line"] -= .5
-
 
     return pvlres
 
@@ -123,5 +126,3 @@ def ground_to_image(cube_path, lon, lat):
     if len(lines) == 1 and len(samples) == 1:
         lines, samples = lines[0], samples[0]
     return lines, samples
-
-
