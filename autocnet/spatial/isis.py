@@ -63,7 +63,7 @@ def point_info(cube_path, x, y, point_type, allow_outside=False):
         except ProcessError as e:
             warn(f"CAMPT call failed, image: {cube_path}\n{e.stderr}")
             return
-        print('campt output:\n', pvlres)
+        print('campt finished')
 
         pvlres = pvl.loads(pvlres)
         if len(x) > 1 and len(y) > 1:

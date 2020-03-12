@@ -262,6 +262,8 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
             if cam_type == "isis":
                 line, sample = isis.ground_to_image(node["image_path"], updated_lon, updated_lat)
 
+            print(f'Back projected to {line}, {sample}')
+            print(f'Making a measure')
             point.measures.append(Measures(sample=sample,
                                            line=line,
                                            apriorisample=sample,
