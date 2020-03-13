@@ -32,9 +32,13 @@ rectangular_srid = spatial['rectangular_srid']
 class BaseMixin(object):
     @classmethod
     def create(cls, session, **kw):
+        print(f'Creating {cls}')
         obj = cls(**kw)
+        rint(f'Adding {cls}')
         session.add(obj)
+        rint(f'Committing {cls}')
         session.commit()
+        rint(f'{cls} committed!')
         return obj
 
     @staticmethod
