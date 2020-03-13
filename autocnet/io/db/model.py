@@ -376,7 +376,7 @@ class Measures(BaseMixin, Base):
         self._measuretype = v
 
 if isinstance(Session, sqlalchemy.orm.sessionmaker):
-    from autocnet.io.db.triggers import valid_point_function, valid_point_trigger, valid_geom_function, valid_geom_trigger, ignore_image_function, ignore_image_trigger
+    from autocnet.io.db.triggers import valid_point_function, valid_point_trigger, valid_geom_function, valid_geom_trigger#s, ignore_image_function, ignore_image_trigger
 
     # Create the database
     if not database_exists(engine.url):
