@@ -497,7 +497,7 @@ def subpixel_register_point(pointid, iterative_phase_kwargs={}, subpixel_templat
             measure.ignore = True # Unable to phase match
             continue
 
-        new_template_x, new_template_y, template_metric = subpixel_template(source.sample,
+        new_template_x, new_template_y, template_metric, _ = subpixel_template(source.sample,
                                                                 source.line,
                                                                 new_phase_x,
                                                                 new_phase_y,
