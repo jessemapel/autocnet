@@ -376,7 +376,7 @@ class Measures(BaseMixin, Base):
         self._measuretype = v
 
 if isinstance(Session, sqlalchemy.orm.sessionmaker):
-    from autocnet.io.db.triggers import valid_point_function, valid_point_trigger, valid_geom_function, valid_geom_trigger#s, ignore_image_function, ignore_image_trigger
+    from autocnet.io.db.triggers import valid_point_function, valid_point_trigger, valid_geom_function, valid_geom_trigger, ignore_image_function, ignore_image_trigger
 
     # Create the database
     if not database_exists(engine.url):
@@ -389,8 +389,8 @@ if isinstance(Session, sqlalchemy.orm.sessionmaker):
         event.listen(Measures.__table__, 'after_create', valid_point_trigger)
         event.listen(Base.metadata, 'before_create', valid_geom_function)
         event.listen(Images.__table__, 'after_create', valid_geom_trigger)
-        # event.listen(Base.metadata, 'before_create', ignore_image_function)
-        # event.listen(Images.__table__, 'after_create', ignore_image_trigger)
+        event.listen(Base.metadata, 'before_create', ignore_image_function)
+        event.listen(Images.__table__, 'after_create', ignore_image_trigger)
 
     Base.metadata.bind = engine
     # If the table does not exist, this will create it. This is used in case a
