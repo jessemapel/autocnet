@@ -272,9 +272,9 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
                                aprioriline=line,
                                imageid=node['node_id'],
                                serial=serial,
-                               measuretype=3))
+                               measuretype=3)
             print(f'Adding measure')
-            point.measures.append(
+            point.measures.append(measure)
 
         if len(point.measures) >= 2:
             points.append(point)
