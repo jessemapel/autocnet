@@ -283,7 +283,7 @@ class Points(BaseMixin, Base):
     ignore = Column("pointIgnore", Boolean, default=False)
     _apriori = Column("apriori", Geometry('POINTZ', srid=rectangular_srid, dimension=3, spatial_index=False))
     _adjusted = Column("adjusted", Geometry('POINTZ', srid=rectangular_srid, dimension=3, spatial_index=False))
-    measures = relationship('Measures')
+    measures = relationship('Measures', cascade='save-update, merge, expunge')
 
     @hybrid_property
     def geom(self):
