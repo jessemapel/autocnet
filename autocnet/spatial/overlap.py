@@ -173,7 +173,7 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
         lon = v[0]
         lat = v[1]
 
-        print(f'Placing point at lat: {alt}, lon: {lon}')
+        print(f'Placing point at lat: {lat}, lon: {lon}')
 
         # Calculate the height, the distance (in meters) above or
         # below the aeroid (meters above or below the BCBF spheroid).
