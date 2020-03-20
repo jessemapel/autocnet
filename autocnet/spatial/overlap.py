@@ -190,7 +190,7 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
                              'latlon', 'geocent')
         if cam_type == "isis":
             # Convert to geocentric lon, lat
-            geocent_lon, geocent_lat, _ = reproject([pcoord.x, pcoord.y, pcoord.z],
+            geocent_lon, geocent_lat, _ = reproject([x, y, z],
                                                     semi_major, semi_major, 'geocent', 'latlon')
             line, sample = isis.ground_to_image(node["image_path"], geocent_lon ,geocent_lat)
         if cam_type == "csm":
@@ -267,7 +267,7 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
 
         # Compute ground point to back project into measurtes
         gnd = csmapi.EcefCoord(x, y, z)
-        geocent_lon, geocent_lat, _ = reproject([pcoord.x, pcoord.y, pcoord.z],
+        geocent_lon, geocent_lat, _ = reproject([x, y, z],
                                                 semi_major, semi_major, 'geocent', 'latlon')
         for node in nodes:
             image_name = node["image_path"]
