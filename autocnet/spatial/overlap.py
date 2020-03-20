@@ -173,8 +173,6 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
         lon = v[0]
         lat = v[1]
 
-        print(f'Placing point at lat: {lat}, lon: {lon}')
-
         # Calculate the height, the distance (in meters) above or
         # below the aeroid (meters above or below the BCBF spheroid).
         if dem is None:
@@ -198,7 +196,6 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
             gnd = csmapi.EcefCoord(x, y, z)
             image_coord = node.camera.groundToImage(gnd)
             sample, line = image_coord.samp, image_coord.line
-        print(f'Reference image coordinate is line: {line}, sample: {sample}')
 
         # Extract ORB features in a sub-image around the desired point
         image_roi = roi.Roi(node.geodata, sample, line, size_x=size, size_y=size)
@@ -215,7 +212,6 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
         left_x, _, top_y, _ = image_roi.image_extent
         newsample = left_x + interesting.x
         newline = top_y + interesting.y
-        print(f'Interesting image coordinate is line: {newline}, sample: {newsample}')
 
         # Get the updated lat/lon from the feature in the node
         if cam_type == "isis":
@@ -252,7 +248,6 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
         # original point and hope the matcher can handle it when sub-pixel registering
         updated_lon, updated_lat, updated_height = reproject([x, y, z], semi_major, semi_minor,
                                                              'geocent', 'latlon')
-        print(f'Updated point at lat: {updated_lat}, lon: {updated_lon}')
         if not geom.contains(shapely.geometry.Point(updated_lon, updated_lat)):
             x, y, z = reproject([lon, lat, height],
                                 semi_major, semi_major, 'latlon', 'geocent')
@@ -270,15 +265,12 @@ def place_points_in_overlap(nodes, geom, cam_type="csm",
         geocent_lon, geocent_lat, _ = reproject([x, y, z],
                                                 semi_major, semi_major, 'geocent', 'latlon')
         for node in nodes:
-            image_name = node["image_path"]
-            print(f'Creating measure for {image_name}')
             if cam_type == "csm":
                 image_coord = node.camera.groundToImage(gnd)
                 sample, line = image_coord.samp, image_coord.line
             if cam_type == "isis":
                 line, sample = isis.ground_to_image(node["image_path"], geocent_lon, geocent_lat)
 
-            print(f'Measure at line: {line}, sample: {sample}')
             point.measures.append(Measures(sample=sample,
                                            line=line,
                                            apriorisample=sample,
