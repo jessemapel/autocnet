@@ -43,6 +43,7 @@ from shapely.geometry import Point
 
 from plurmy import Slurm
 
+from autocnet.matcher.subpixel import check_match_func
 from autocnet.io.db.model import Images, Points, Measures, JsonEncoder
 from autocnet.cg.cg import distribute_points_in_geom, xy_in_polygon
 from autocnet.io.db.connection import new_connection
@@ -50,7 +51,7 @@ from autocnet.spatial import isis
 from autocnet.transformation.spatial import reproject, oc2og
 from autocnet.matcher.cpu_extractor import extract_most_interesting
 from autocnet.transformation import roi
-from autocnet.matcher.subpixel import geom_match
+from autocnet.matcher.subpixel import geom_match_simple
 from autocnet.utils.utils import bytescale
 
 import warnings
@@ -105,8 +106,8 @@ def generate_ground_points(Session, ground_mosaic, nspts_func=lambda x: int(roun
         # res = ground_session.execute(formated_sql)
         p = Point(*coord)
         print(f'point {i}'),
- 
-        
+
+
         linessamples = isis.point_info(ground_mosaic.file_name, p.x, p.y, 'ground')
         if linessamples is None:
             print('unable to find point in ground image')
@@ -171,7 +172,8 @@ def propagate_point(Session,
                     samples,
                     size_x=40,
                     size_y=40,
-                    template_kwargs={'image_size': (39, 39), 'template_size': (21, 21)},
+                    match_func="classic",
+                    match_kwargs={'image_size': (39, 39), 'template_size': (21, 21)},
                     verbose=False,
                     cost=lambda x, y: y == np.max(x)):
     """
@@ -245,6 +247,9 @@ def propagate_point(Session,
                    and cartesian) of successfully propagated points
 
     """
+
+    match_func = check_match_func(match_func)
+
     session = Session()
     engine = session.get_bind()
     string = f"select * from images where ST_Intersects(geom, ST_SetSRID(ST_Point({lon}, {lat}), {config['spatial']['latitudinal_srid']}))"
@@ -263,7 +268,7 @@ def propagate_point(Session,
     # lazily iterate for now
     for k,m in image_measures.iterrows():
         base_image = GeoDataset(m["path"])
-        
+
         sx, sy = m["sample"], m["line"]
 
         for i,image in images.iterrows():
@@ -277,8 +282,9 @@ def propagate_point(Session,
                 print(f'prop point: base_image: {base_image}')
                 print(f'prop point: dest_image: {dest_image}')
                 print(f'prop point: (sx, sy): ({sx}, {sy})')
-                x,y, dist, metrics, corrmap = geom_match(base_image, dest_image, sx, sy, \
-                        template_kwargs=template_kwargs, \
+                x,y, dist, metrics, corrmap = geom_match_simple(base_image, dest_image, sx, sy, 16, 16, \
+                        match_func = match_func, \
+                        match_kwargs=match_kwargs, \
                         verbose=verbose)
             except Exception as e:
                 raise Exception(e)
@@ -350,7 +356,8 @@ def propagate_control_network(Session,
         base_cnet,
         size_x=40,
         size_y=40,
-        template_kwargs={'image_size': (39,39), 'template_size': (21,21)},
+        match_func="classic",
+        match_kwargs={'image_size': (39,39), 'template_size': (21,21)},
         verbose=False,
         cost=lambda x,y: y == np.max(x)):
     """
@@ -402,6 +409,8 @@ def propagate_control_network(Session,
     warnings.warn('This function is not well tested. No tests currently exist \
     in the test suite for this version of the function.')
 
+    match_func = check_match_func(match_func)
+
     groups = base_cnet.groupby('pointid').groups
 
     # append CNET info into structured Python list
@@ -427,7 +436,8 @@ def propagate_control_network(Session,
                                       measures["sample"],
                                       size_x,
                                       size_y,
-                                      template_kwargs,
+                                      match_func,
+                                      match_kwargs,
                                       verbose=verbose,
                                       cost=cost)
 
@@ -435,7 +445,7 @@ def propagate_control_network(Session,
         if len(gp_measures) == 0:
             continue
         constrained_net.extend(gp_measures)
-        
+
     ground = gpd.GeoDataFrame.from_dict(constrained_net).set_geometry('point')
     groundpoints = ground.groupby('pointid').groups
 
