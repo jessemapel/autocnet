@@ -11,6 +11,8 @@ SELECT measures."pointid",
         points."apriori",
         points."adjusted",
         points."pointIgnore",
+        points."referenceIndex",
+        points."identifier",
         measures."id",
         measures."serialnumber",
         measures."sample",
@@ -59,6 +61,7 @@ ORDER BY measures."pointid", measures."id";
         df.rename(columns = {'pointid': 'id',
                              'pointType': 'pointtype',
                              'measureType': 'measuretype'}, inplace=True)
+        df['id'] = df.apply(lambda row: f"{row['identifier']}_{row['id']}", axis=1)
 
         #create columns in the dataframe; zeros ensure plio (/protobuf) will
         #ignore unless populated with alternate values
